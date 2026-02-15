@@ -225,4 +225,4 @@ Part of a 10-project streaming engineering portfolio. This is **Project 1: Kafka
 
 ---
 
-*Built by [Eranga Herath](https://github.com/erangaherath)*
+*Built by [Eranga Herath](https://github.com/erangaherathofficial)*
