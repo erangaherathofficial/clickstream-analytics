@@ -10,6 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class MetricsService {
@@ -25,21 +28,41 @@ public class MetricsService {
     @Transactional
     public void recordEvent(ClickEvent event) {
         Instant hourWindow = event.timestamp().truncatedTo(ChronoUnit.HOURS);
+        repository.upsertMetric(event.pageUrl(), event.eventType().name(), hourWindow);
+        log.debug("Upserted metric: {} {} at {}", event.pageUrl(), event.eventType(), hourWindow);
+    }
 
-        repository.findByPageUrlAndEventTypeAndTimeWindow(
-                event.pageUrl(), event.eventType(), hourWindow
-        ).ifPresentOrElse(
-                metric -> {
-                    metric.incrementCount();
-                    log.debug("Incremented count for {} {} to {}",
-                            event.pageUrl(), event.eventType(), metric.getEventCount());
-                },
-                () -> {
-                    var metric = new PageViewMetric(event.pageUrl(), event.eventType(), hourWindow);
-                    repository.save(metric);
-                    log.info("New metric bucket: {} {} at {}",
-                            event.pageUrl(), event.eventType(), hourWindow);
-                }
+    public List<PageViewMetric> getAllMetrics() {
+        return repository.findAll();
+    }
+
+    public List<PageViewMetric> getMetricsByPage(String pageUrl) {
+        return repository.findByPageUrl(pageUrl);
+    }
+
+    public Map<String, Object> getSummary() {
+        List<PageViewMetric> all = repository.findAll();
+
+        long totalEvents = all.stream()
+                .mapToLong(PageViewMetric::getEventCount)
+                .sum();
+
+        long uniquePages = all.stream()
+                .map(PageViewMetric::getPageUrl)
+                .distinct()
+                .count();
+
+        Map<String, Long> eventsByType = all.stream()
+                .collect(Collectors.groupingBy(
+                        m -> m.getEventType().name(),
+                        Collectors.summingLong(PageViewMetric::getEventCount)
+                ));
+
+        return Map.of(
+                "totalEvents", totalEvents,
+                "uniquePages", uniquePages,
+                "eventsByType", eventsByType,
+                "metricsCount", all.size()
         );
     }
 }

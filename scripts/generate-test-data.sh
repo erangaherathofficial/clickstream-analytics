@@ -10,10 +10,9 @@ DEVICES=("mobile" "desktop" "tablet")
 BROWSERS=("Chrome" "Firefox" "Safari" "Edge")
 LOCATIONS=("US" "UK" "LK" "DE" "JP")
 
-echo "🚀 Generating $TOTAL_EVENTS test events..."
-echo ""
+echo "Generating ${TOTAL_EVENTS} test events..."
 
-for i in $(seq 1 $TOTAL_EVENTS); do
+for i in $(seq 1 "${TOTAL_EVENTS}"); do
     user_id="user-$((RANDOM % 5 + 1))"
     session_id="sess-${user_id}-$((RANDOM % 3 + 1))"
     page="${PAGES[$((RANDOM % ${#PAGES[@]}))]}"
@@ -40,13 +39,12 @@ for i in $(seq 1 $TOTAL_EVENTS); do
         }")
 
     if [ "$response" -eq 202 ]; then
-        echo "📨 Sent event $i/$TOTAL_EVENTS | $user_id | $event_type | $page"
+        echo "[${i}/${TOTAL_EVENTS}] ${user_id} | ${event_type} | ${page}"
     else
-        echo "❌ Failed event $i (HTTP $response)"
+        echo "[${i}/${TOTAL_EVENTS}] FAILED (HTTP ${response})"
     fi
 
     sleep 0.1
 done
 
-echo ""
-echo "✅ Done! Check metrics at http://localhost:8090/api/metrics/summary"
+echo "Done. ${TOTAL_EVENTS} events sent."

@@ -3,15 +3,13 @@ set -euo pipefail
 
 BASE_URL="http://localhost:8090/api/events"
 TOTAL_EVENTS=1000
-BATCH_SIZE=50
+CONCURRENCY=50
 
-echo "🚀 Performance test: $TOTAL_EVENTS events"
-echo "⚙️  Batch size: $BATCH_SIZE parallel requests"
-echo ""
+echo "Performance test: ${TOTAL_EVENTS} events (${CONCURRENCY} concurrent)"
 
 start_time=$(date +%s)
 
-for i in $(seq 1 $TOTAL_EVENTS); do
+for i in $(seq 1 "${TOTAL_EVENTS}"); do
     curl -s -o /dev/null -X POST "$BASE_URL" \
         -H "Content-Type: application/json" \
         -d "{
@@ -28,9 +26,9 @@ for i in $(seq 1 $TOTAL_EVENTS); do
             \"location\": \"US\"
         }" &
 
-    if (( i % BATCH_SIZE == 0 )); then
+    if (( i % CONCURRENCY == 0 )); then
         wait
-        echo "📊 Progress: $i/$TOTAL_EVENTS events sent"
+        echo "  ${i}/${TOTAL_EVENTS} sent"
     fi
 done
 
@@ -46,10 +44,4 @@ fi
 throughput=$((TOTAL_EVENTS / duration))
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ Completed: $TOTAL_EVENTS events"
-echo "⏱️  Duration: ${duration}s"
-echo "🚀 Throughput: ~${throughput} events/sec"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "📈 Check results: http://localhost:8090/api/metrics/summary"
+echo "Completed: ${TOTAL_EVENTS} events in ${duration}s (~${throughput} events/sec)"

@@ -6,7 +6,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "page_view_metrics", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"pageUrl", "eventType", "timeWindow"})
+        @UniqueConstraint(columnNames = {"page_url", "event_type", "time_window"})
 })
 public class PageViewMetric {
 
@@ -14,13 +14,17 @@ public class PageViewMetric {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "page_url")
     private String pageUrl;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "event_type")
     private EventType eventType;
 
+    @Column(name = "event_count")
     private long eventCount;
 
+    @Column(name = "time_window")
     private Instant timeWindow;
 
     protected PageViewMetric() {
@@ -51,9 +55,5 @@ public class PageViewMetric {
 
     public Instant getTimeWindow() {
         return timeWindow;
-    }
-
-    public void incrementCount() {
-        this.eventCount++;
     }
 }

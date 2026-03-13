@@ -21,7 +21,7 @@ services:
       - kafka_data:/var/lib/kafka/data
 
   kafka-ui:
-    image: ghcr.io/kafbat/kafka-ui:latest
+    image: ghcr.io/kafbat/kafka-ui:v1.4.2
     container_name: kafka-ui
     ports:
       - "8080:8080"

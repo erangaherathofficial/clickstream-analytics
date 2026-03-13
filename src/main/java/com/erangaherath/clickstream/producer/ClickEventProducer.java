@@ -29,7 +29,7 @@ public class ClickEventProducer {
                     if (ex != null) {
                         log.error("Failed to send event {}: {}", event.eventId(), ex.getMessage());
                     } else {
-                        log.info("Sent event {} to partition {} offset {}",
+                        log.debug("Sent event {} to partition {} offset {}",
                                 event.eventId(),
                                 result.getRecordMetadata().partition(),
                                 result.getRecordMetadata().offset());

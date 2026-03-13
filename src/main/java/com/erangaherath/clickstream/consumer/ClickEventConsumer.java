@@ -21,7 +21,7 @@ public class ClickEventConsumer {
 
     @KafkaListener(topics = "${app.kafka.topic}", groupId = "${spring.kafka.consumer.group-id}")
     public void consume(ConsumerRecord<String, ClickEvent> record) {
-        log.info("Consumed event: {} | partition: {} | offset: {} | key: {}",
+        log.debug("Consumed event: {} | partition: {} | offset: {} | key: {}",
                 record.value().eventId(),
                 record.partition(),
                 record.offset(),

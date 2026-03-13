@@ -1,14 +1,14 @@
 # Real-Time Clickstream Analytics
 
-Production-grade real-time streaming analytics pipeline built with Apache Kafka, Spring Boot, and PostgreSQL. Ingests
-user click events via REST API, streams through Kafka, and aggregates metrics into time-windowed buckets for analytics.
+Real-time streaming analytics pipeline that ingests user click events via REST API, streams through Apache Kafka, and
+aggregates metrics into time-windowed buckets stored in PostgreSQL.
 
 ## Architecture
 
 ```
 ┌──────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────────┐     ┌────────────┐
 │  Client  │────→│  REST API    │────→│  Kafka Topic    │────→│  Consumer    │────→│ PostgreSQL │
-│  (curl)  │     │  Controller  │     │  (3 partitions) │     │  (group)     │     │  (metrics) │
+│          │     │  (async)     │     │  (3 partitions) │     │  (group)     │     │  (metrics) │
 └──────────┘     └──────────────┘     └─────────────────┘     └──────────────┘     └────────────┘
                        │                      │                      │
                   HTTP 202             sessionId as key        Hourly windowed
@@ -17,12 +17,12 @@ user click events via REST API, streams through Kafka, and aggregates metrics in
 
 ### Data Flow
 
-1. **Ingestion** — Client sends click events via `POST /api/events`
-2. **Production** — `ClickEventProducer` publishes to Kafka with `sessionId` as partition key
-3. **Streaming** — Kafka distributes events across 3 partitions, maintaining per-session ordering
-4. **Consumption** — `ClickEventConsumer` reads events from the consumer group
-5. **Aggregation** — `MetricsService` truncates timestamps to hourly windows and upserts counters
-6. **Query** — `GET /api/metrics/summary` returns aggregated analytics
+1. **Ingestion** — Click events received via `POST /api/events`
+2. **Production** — Published to Kafka with `sessionId` as partition key
+3. **Streaming** — Distributed across 3 partitions, maintaining per-session ordering
+4. **Consumption** — Consumer group reads and delegates to aggregation service
+5. **Aggregation** — Timestamps truncated to hourly windows, counters upserted
+6. **Query** — Aggregated metrics exposed via `GET /api/metrics/*`
 
 ## Tech Stack
 
@@ -32,7 +32,7 @@ user click events via REST API, streams through Kafka, and aggregates metrics in
 | Message Broker | Apache Kafka 4.1 (KRaft) | Event streaming, partitioning  |
 | Database       | PostgreSQL 16            | Aggregated metrics storage     |
 | Monitoring     | Kafka UI (Kafbat)        | Topic inspection, consumer lag |
-| Infrastructure | Docker Compose           | One-command local setup        |
+| Infrastructure | Docker Compose           | Local environment setup        |
 
 ## Quick Start
 
@@ -62,10 +62,9 @@ This starts:
 
 Application starts on `localhost:8090`.
 
-### 3. Send Test Events
+### 3. Send Events
 
 ```bash
-# Single event
 curl -X POST http://localhost:8090/api/events \
   -H "Content-Type: application/json" \
   -d '{
@@ -81,12 +80,6 @@ curl -X POST http://localhost:8090/api/events \
     "browser": "Chrome 120",
     "location": "US"
   }'
-
-# Generate 100 randomized events
-./scripts/generate-test-data.sh
-
-# Performance test (1,000 events)
-./scripts/performance-test.sh
 ```
 
 ### 4. Query Metrics
@@ -95,17 +88,24 @@ curl -X POST http://localhost:8090/api/events \
 # Summary
 curl -s http://localhost:8090/api/metrics/summary | jq .
 
-# All metrics
-curl -s http://localhost:8090/api/metrics | jq .
-
 # By page
 curl -s http://localhost:8090/api/metrics/page/products | jq .
 
-# Full report (API + SQL)
+# Full report (API + PostgreSQL)
 ./scripts/query-metrics.sh
 ```
 
-## API Documentation
+### 5. Load Testing
+
+```bash
+# Generate 100 randomized events
+./scripts/generate-test-data.sh
+
+# Performance test — 1,000 events with throughput measurement
+./scripts/performance-test.sh
+```
+
+## API
 
 ### Events
 
@@ -127,52 +127,36 @@ curl -s http://localhost:8090/api/metrics/page/products | jq .
 |--------|-----------|----------------|----------|
 | GET    | `/health` | Service health | 200      |
 
-## Key Design Decisions
+## Design Decisions
 
-### Partition Key Strategy — `sessionId`
+### Partition Key — `sessionId`
 
-Events are keyed by `sessionId`, guaranteeing all events within a session land in the same partition and are processed
-in order. This enables accurate session analytics (duration, funnel tracking) without consumer-side sorting.
+Events keyed by `sessionId` guarantee all events within a session land in the same partition and are processed in order.
+This enables accurate session analytics (duration, funnel tracking) without consumer-side sorting.
 
 **Trade-off:** Potential hot partitions if a single session generates disproportionate traffic. Acceptable for
 clickstream workloads where sessions are short-lived and well-distributed.
 
 ### Windowed Aggregation — Hourly Buckets
 
-Timestamps are truncated to the hour before storage. Multiple events for the same `(pageUrl, eventType, hour)` increment
-a single counter rather than creating individual rows.
+Timestamps truncated to the hour before storage. Multiple events for the same `(pageUrl, eventType, hour)` increment a
+single counter rather than creating individual rows. Millions of raw events compress into thousands of metric rows.
 
-**Result:** Millions of raw events compress into thousands of metric rows. Fast queries, minimal storage.
+### Async Producer — `acks=1`
 
-### Async Producer with `acks=1`
+Asynchronous send with leader-only acknowledgment. Prioritizes throughput over guaranteed delivery — appropriate for
+analytics where occasional event loss is acceptable.
 
-The producer sends events asynchronously with leader-only acknowledgment. This prioritizes throughput over guaranteed
-delivery — appropriate for analytics where losing a few events is acceptable.
+### Consumer Group — Auto Rebalancing
 
-### Consumer Group — Single Group, Auto Rebalancing
-
-One consumer group (`clickstream-analytics-group`) with automatic partition assignment. If multiple instances are
-deployed, Kafka rebalances partitions across consumers automatically.
+Single consumer group with automatic partition assignment. Horizontally scalable — additional instances trigger
+automatic rebalancing across partitions.
 
 ## Monitoring
 
-- **Kafka UI**: `http://localhost:8080` — Inspect topics, partitions, consumer groups, and messages
-- **Application Logs**: Producer logs partition/offset on send; consumer logs on receive
-- **PostgreSQL**: Direct SQL queries for deep metric analysis
-
-## Production Considerations
-
-This is a learning project. For production, you would need:
-
-- **Schema Registry + Avro** — Enforce schema evolution, reduce payload size
-- **Idempotent Producer** (`acks=all` + `enable.idempotence=true`) — Prevent duplicate events
-- **Dead Letter Topic** — Route failed events instead of losing them
-- **Consumer Error Handling** — Retry policies, circuit breakers
-- **Database Connection Pooling** — HikariCP tuning for high throughput
-- **Horizontal Scaling** — Multiple consumer instances behind a load balancer
-- **Security** — SASL_SSL for Kafka, input validation, rate limiting
-- **Observability** — Prometheus metrics, Grafana dashboards, distributed tracing
-- **Data Retention** — Kafka topic retention policies, PostgreSQL partitioning
+- **Kafka UI** — `http://localhost:8080` — Topics, partitions, consumer groups, message inspection
+- **Application Logs** — Producer and consumer activity logged at DEBUG level; errors at ERROR
+- **PostgreSQL** — Direct SQL queries for metric analysis
 
 ## Project Structure
 
@@ -180,7 +164,6 @@ This is a learning project. For production, you would need:
 clickstream-analytics/
 ├── docker-compose.yml
 ├── pom.xml
-├── README.md
 ├── scripts/
 │   ├── generate-test-data.sh
 │   ├── performance-test.sh
@@ -207,22 +190,6 @@ clickstream-analytics/
         └── MetricsService.java
 ```
 
-## Kafka Concepts Applied
-
-| Concept             | Implementation                                            |
-|---------------------|-----------------------------------------------------------|
-| Topics & Partitions | `clickstream-events` with 3 partitions                    |
-| Message Keys        | `sessionId` for partition-based ordering                  |
-| Producer            | Async send, `acks=1`, 3 retries                           |
-| Consumer Groups     | `clickstream-analytics-group`, auto offset commit         |
-| Offset Management   | `earliest` reset policy, committed offsets on restart     |
-| Serialization       | JSON via Spring Kafka `JsonSerializer`/`JsonDeserializer` |
-| Topic Configuration | Programmatic creation via `TopicBuilder`                  |
-
-## Built With
-
-Part of a 10-project streaming engineering portfolio. This is **Project 1: Kafka Fundamentals**.
-
 ---
 
-*Built by [Eranga Herath](https://github.com/erangaherathofficial)*
+*[Eranga Herath](https://github.com/erangaherathofficial)*

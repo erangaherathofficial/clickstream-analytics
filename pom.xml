@@ -12,20 +12,7 @@
     <artifactId>clickstream-analytics</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>clickstream-analytics</name>
-    <description>clickstream-analytics</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
+    <description>Real-time clickstream analytics pipeline</description>
     <properties>
         <java.version>17</java.version>
     </properties>
